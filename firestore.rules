@@ -1,0 +1,402 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Global Safety Net: Default deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- GLOBAL PRIMITIVES ---
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && (
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid)) ||
+        ('email_verified' in request.auth.token &&
+         request.auth.token.email_verified == true &&
+         'email' in request.auth.token &&
+         request.auth.token.email == 'zeeshanjan21khankoko@gmail.com')
+      );
+    }
+
+    // --- ENTITY VALIDATION HELPERS ---
+    function isValidUser(data) {
+      return data.keys().hasAll(['userId', 'username', 'email', 'playerId', 'walletBalance', 'matchesPlayed', 'wins', 'blocked', 'createdAt', 'updatedAt']) &&
+             data.keys().hasOnly(['userId', 'username', 'email', 'playerId', 'photoBase64', 'walletBalance', 'matchesPlayed', 'wins', 'blocked', 'createdAt', 'updatedAt']) &&
+             data.userId is string && data.userId.size() >= 1 && data.userId.size() <= 128 &&
+             data.username is string && data.username.size() >= 3 && data.username.size() <= 24 &&
+             data.email is string && data.email.size() >= 3 && data.email.size() <= 160 &&
+             data.playerId is string && data.playerId.size() >= 4 && data.playerId.size() <= 24 &&
+             (!('photoBase64' in data) || data.photoBase64 == null || (data.photoBase64 is string && data.photoBase64.size() <= 200000)) &&
+             data.walletBalance is int && data.walletBalance >= 0 && data.walletBalance <= 100000000 &&
+             data.matchesPlayed is int && data.matchesPlayed >= 0 && data.matchesPlayed <= 1000000 &&
+             data.wins is int && data.wins >= 0 && data.wins <= 1000000 &&
+             data.blocked is bool &&
+             data.createdAt is timestamp && data.createdAt <= request.time &&
+             data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    function isValidAdmin(data) {
+      return data.keys().hasAll(['userId', 'email', 'displayName', 'role', 'createdAt']) &&
+             data.keys().hasOnly(['userId', 'email', 'displayName', 'role', 'createdAt']) &&
+             data.userId is string && data.userId.size() >= 1 && data.userId.size() <= 128 &&
+             data.email is string && data.email.size() >= 3 && data.email.size() <= 160 &&
+             data.displayName is string && data.displayName.size() >= 1 && data.displayName.size() <= 60 &&
+             data.role in ['SUPER_ADMIN', 'ADMIN'] &&
+             data.createdAt is timestamp && data.createdAt <= request.time;
+    }
+
+    function isValidTournament(data) {
+      return data.keys().hasAll(['title', 'gameName', 'bannerKey', 'entryFee', 'prizePool', 'maxSlots', 'filledSlots', 'matchTimeEpochMs', 'matchTimeLabel', 'status', 'rulesSummary', 'createdBy', 'createdAt', 'updatedAt']) &&
+             data.keys().hasOnly(['title', 'gameName', 'bannerKey', 'entryFee', 'prizePool', 'maxSlots', 'filledSlots', 'matchTimeEpochMs', 'matchTimeLabel', 'status', 'rulesSummary', 'roomId', 'winnerUserId', 'winnerUsername', 'winnerPlayerId', 'createdBy', 'createdAt', 'updatedAt']) &&
+             data.title is string && data.title.size() >= 3 && data.title.size() <= 80 &&
+             data.gameName is string && data.gameName.size() >= 2 && data.gameName.size() <= 40 &&
+             data.bannerKey in ['arena', 'battle_royale', 'tactical_fps'] &&
+             data.entryFee is int && data.entryFee >= 0 && data.entryFee <= 1000000 &&
+             data.prizePool is int && data.prizePool >= 0 && data.prizePool <= 50000000 &&
+             data.maxSlots is int && data.maxSlots >= 2 && data.maxSlots <= 200 &&
+             data.filledSlots is int && data.filledSlots >= 0 && data.filledSlots <= data.maxSlots &&
+             data.matchTimeEpochMs is int && data.matchTimeEpochMs >= 0 &&
+             data.matchTimeLabel is string && data.matchTimeLabel.size() >= 3 && data.matchTimeLabel.size() <= 60 &&
+             data.status in ['UPCOMING', 'LIVE', 'COMPLETED'] &&
+             data.rulesSummary is string && data.rulesSummary.size() <= 600 &&
+             (!('roomId' in data) || data.roomId == null || (data.roomId is string && data.roomId.size() <= 80)) &&
+             (!('winnerUserId' in data) || data.winnerUserId == null || (data.winnerUserId is string && data.winnerUserId.size() <= 128)) &&
+             (!('winnerUsername' in data) || data.winnerUsername == null || (data.winnerUsername is string && data.winnerUsername.size() <= 40)) &&
+             (!('winnerPlayerId' in data) || data.winnerPlayerId == null || (data.winnerPlayerId is string && data.winnerPlayerId.size() <= 24)) &&
+             data.createdBy is string && data.createdBy.size() >= 1 && data.createdBy.size() <= 128 &&
+             data.createdAt is timestamp && data.createdAt <= request.time &&
+             data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    function isValidRegistration(data) {
+      return data.keys().hasAll(['userId', 'tournamentId', 'username', 'playerId', 'entryFeePaid', 'prizeWon', 'joinedAt']) &&
+             data.keys().hasOnly(['userId', 'tournamentId', 'username', 'playerId', 'photoBase64', 'entryFeePaid', 'placement', 'prizeWon', 'joinedAt']) &&
+             data.userId is string && data.userId.size() >= 1 && data.userId.size() <= 128 &&
+             data.tournamentId is string && data.tournamentId.size() >= 1 && data.tournamentId.size() <= 128 &&
+             data.username is string && data.username.size() >= 3 && data.username.size() <= 24 &&
+             data.playerId is string && data.playerId.size() >= 4 && data.playerId.size() <= 24 &&
+             (!('photoBase64' in data) || data.photoBase64 == null || (data.photoBase64 is string && data.photoBase64.size() <= 200000)) &&
+             data.entryFeePaid is int && data.entryFeePaid >= 0 && data.entryFeePaid <= 1000000 &&
+             (!('placement' in data) || data.placement == null || (data.placement is string && data.placement.size() <= 40)) &&
+             data.prizeWon is int && data.prizeWon >= 0 && data.prizeWon <= 50000000 &&
+             data.joinedAt is timestamp && data.joinedAt <= request.time;
+    }
+
+    function isValidDeposit(data) {
+      return data.keys().hasAll(['userId', 'username', 'playerId', 'amount', 'paymentMethod', 'referenceId', 'senderAccount', 'screenshotBase64', 'status', 'createdAt', 'updatedAt']) &&
+             data.keys().hasOnly(['userId', 'username', 'playerId', 'amount', 'paymentMethod', 'referenceId', 'senderAccount', 'screenshotBase64', 'status', 'adminNote', 'reviewedBy', 'createdAt', 'updatedAt']) &&
+             data.userId is string && data.userId.size() >= 1 && data.userId.size() <= 128 &&
+             data.username is string && data.username.size() >= 3 && data.username.size() <= 24 &&
+             data.playerId is string && data.playerId.size() >= 4 && data.playerId.size() <= 24 &&
+             data.amount is int && data.amount >= 50 && data.amount <= 500000 &&
+             data.paymentMethod in ['JAZZCASH', 'EASYPAISA', 'BANK_TRANSFER'] &&
+             data.referenceId is string && data.referenceId.size() >= 4 && data.referenceId.size() <= 60 &&
+             data.senderAccount is string && data.senderAccount.size() >= 4 && data.senderAccount.size() <= 40 &&
+             data.screenshotBase64 is string && data.screenshotBase64.size() >= 10 && data.screenshotBase64.size() <= 350000 &&
+             data.status in ['PENDING', 'APPROVED', 'REJECTED'] &&
+             (!('adminNote' in data) || data.adminNote == null || (data.adminNote is string && data.adminNote.size() <= 200)) &&
+             (!('reviewedBy' in data) || data.reviewedBy == null || (data.reviewedBy is string && data.reviewedBy.size() <= 128)) &&
+             data.createdAt is timestamp && data.createdAt <= request.time &&
+             data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    function isValidUsedReference(data) {
+      return data.keys().hasAll(['refKey', 'userId', 'depositId', 'createdAt']) &&
+             data.keys().hasOnly(['refKey', 'userId', 'depositId', 'createdAt']) &&
+             data.refKey is string && data.refKey.size() >= 4 && data.refKey.size() <= 128 &&
+             data.userId is string && data.userId.size() >= 1 && data.userId.size() <= 128 &&
+             data.depositId is string && data.depositId.size() >= 1 && data.depositId.size() <= 128 &&
+             data.createdAt is timestamp && data.createdAt <= request.time;
+    }
+
+    function isValidWithdrawal(data) {
+      return data.keys().hasAll(['userId', 'username', 'playerId', 'amount', 'paymentMethod', 'accountTitle', 'accountNumber', 'status', 'createdAt', 'updatedAt']) &&
+             data.keys().hasOnly(['userId', 'username', 'playerId', 'amount', 'paymentMethod', 'accountTitle', 'accountNumber', 'bankName', 'status', 'adminNote', 'reviewedBy', 'createdAt', 'updatedAt']) &&
+             data.userId is string && data.userId.size() >= 1 && data.userId.size() <= 128 &&
+             data.username is string && data.username.size() >= 3 && data.username.size() <= 24 &&
+             data.playerId is string && data.playerId.size() >= 4 && data.playerId.size() <= 24 &&
+             data.amount is int && data.amount >= 100 && data.amount <= 500000 &&
+             data.paymentMethod in ['JAZZCASH', 'EASYPAISA', 'BANK_TRANSFER'] &&
+             data.accountTitle is string && data.accountTitle.size() >= 2 && data.accountTitle.size() <= 60 &&
+             data.accountNumber is string && data.accountNumber.size() >= 5 && data.accountNumber.size() <= 40 &&
+             (!('bankName' in data) || data.bankName == null || (data.bankName is string && data.bankName.size() <= 60)) &&
+             data.status in ['PENDING', 'APPROVED', 'REJECTED'] &&
+             (!('adminNote' in data) || data.adminNote == null || (data.adminNote is string && data.adminNote.size() <= 200)) &&
+             (!('reviewedBy' in data) || data.reviewedBy == null || (data.reviewedBy is string && data.reviewedBy.size() <= 128)) &&
+             data.createdAt is timestamp && data.createdAt <= request.time &&
+             data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    function isValidTransaction(data) {
+      return data.keys().hasAll(['userId', 'username', 'type', 'amount', 'direction', 'status', 'description', 'createdAt', 'updatedAt']) &&
+             data.keys().hasOnly(['userId', 'username', 'type', 'amount', 'direction', 'status', 'description', 'referenceId', 'createdAt', 'updatedAt']) &&
+             data.userId is string && data.userId.size() >= 1 && data.userId.size() <= 128 &&
+             data.username is string && data.username.size() >= 3 && data.username.size() <= 24 &&
+             data.type in ['DEPOSIT', 'WITHDRAWAL', 'WITHDRAWAL_REFUND', 'ENTRY_FEE', 'PRIZE_WIN', 'ADMIN_ADJUSTMENT'] &&
+             data.amount is int && data.amount >= 0 && data.amount <= 50000000 &&
+             data.direction in ['CREDIT', 'DEBIT'] &&
+             data.status in ['PENDING', 'COMPLETED', 'REJECTED'] &&
+             data.description is string && data.description.size() >= 2 && data.description.size() <= 160 &&
+             (!('referenceId' in data) || data.referenceId == null || (data.referenceId is string && data.referenceId.size() <= 128)) &&
+             data.createdAt is timestamp && data.createdAt <= request.time &&
+             data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    function isValidWinner(data) {
+      return data.keys().hasAll(['tournamentId', 'tournamentTitle', 'gameName', 'userId', 'username', 'playerId', 'prizeAmount', 'placement', 'declaredBy', 'declaredAt']) &&
+             data.keys().hasOnly(['tournamentId', 'tournamentTitle', 'gameName', 'userId', 'username', 'playerId', 'prizeAmount', 'placement', 'declaredBy', 'declaredAt']) &&
+             data.tournamentId is string && data.tournamentId.size() >= 1 && data.tournamentId.size() <= 128 &&
+             data.tournamentTitle is string && data.tournamentTitle.size() >= 3 && data.tournamentTitle.size() <= 80 &&
+             data.gameName is string && data.gameName.size() >= 2 && data.gameName.size() <= 40 &&
+             data.userId is string && data.userId.size() >= 1 && data.userId.size() <= 128 &&
+             data.username is string && data.username.size() >= 3 && data.username.size() <= 24 &&
+             data.playerId is string && data.playerId.size() >= 4 && data.playerId.size() <= 24 &&
+             data.prizeAmount is int && data.prizeAmount >= 0 && data.prizeAmount <= 50000000 &&
+             data.placement is string && data.placement.size() >= 1 && data.placement.size() <= 40 &&
+             data.declaredBy is string && data.declaredBy.size() >= 1 && data.declaredBy.size() <= 128 &&
+             data.declaredAt is timestamp && data.declaredAt <= request.time;
+    }
+
+    function isValidPaymentConfig(data) {
+      return data.keys().hasAll(['jazzCashTitle', 'jazzCashNumber', 'easyPaisaTitle', 'easyPaisaNumber', 'bankName', 'bankAccountTitle', 'bankAccountNumber', 'instructions', 'updatedAt']) &&
+             data.keys().hasOnly(['jazzCashTitle', 'jazzCashNumber', 'easyPaisaTitle', 'easyPaisaNumber', 'bankName', 'bankAccountTitle', 'bankAccountNumber', 'instructions', 'updatedAt']) &&
+             data.jazzCashTitle is string && data.jazzCashTitle.size() <= 60 &&
+             data.jazzCashNumber is string && data.jazzCashNumber.size() <= 30 &&
+             data.easyPaisaTitle is string && data.easyPaisaTitle.size() <= 60 &&
+             data.easyPaisaNumber is string && data.easyPaisaNumber.size() <= 30 &&
+             data.bankName is string && data.bankName.size() <= 60 &&
+             data.bankAccountTitle is string && data.bankAccountTitle.size() <= 60 &&
+             data.bankAccountNumber is string && data.bankAccountNumber.size() <= 40 &&
+             data.instructions is string && data.instructions.size() <= 400 &&
+             data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    // --- COLLECTIONS ---
+
+    // 1. Users (PII isolated to owner & admin)
+    match /users/{userId} {
+      allow get: if isValidId(userId) && (isOwner(userId) || isAdmin());
+      allow list: if isAdmin();
+
+      allow create: if isValidId(userId) &&
+                       isSignedIn() &&
+                       isValidUser(incoming()) &&
+                       (isAdmin() || (
+                         request.auth.uid == userId &&
+                         incoming().userId == request.auth.uid &&
+                         incoming().walletBalance == 0 &&
+                         incoming().matchesPlayed == 0 &&
+                         incoming().wins == 0 &&
+                         incoming().blocked == false
+                       ));
+
+      allow update: if isValidId(userId) &&
+                       isSignedIn() &&
+                       isValidUser(incoming()) &&
+                       incoming().userId == existing().userId &&
+                       incoming().createdAt == existing().createdAt && (
+                         isAdmin() ||
+                         (isOwner(userId) && existing().blocked == false && (
+                           // Action: Profile Update
+                           incoming().diff(existing()).affectedKeys().hasOnly(['username', 'photoBase64', 'updatedAt']) ||
+                           // Action: Tournament Join Deduction
+                           (incoming().diff(existing()).affectedKeys().hasOnly(['walletBalance', 'matchesPlayed', 'updatedAt']) &&
+                            incoming().walletBalance <= existing().walletBalance &&
+                            incoming().walletBalance >= 0 &&
+                            incoming().matchesPlayed == existing().matchesPlayed + 1) ||
+                           // Action: Withdrawal Hold Deduction
+                           (incoming().diff(existing()).affectedKeys().hasOnly(['walletBalance', 'updatedAt']) &&
+                            incoming().walletBalance < existing().walletBalance &&
+                            incoming().walletBalance >= 0)
+                         ))
+                       );
+
+      allow delete: if isValidId(userId) && isAdmin();
+    }
+
+    // 2. Admins
+    match /admins/{userId} {
+      allow get: if isValidId(userId) && (isOwner(userId) || isAdmin());
+      allow list: if isAdmin();
+      allow create: if isValidId(userId) && isAdmin() && isValidAdmin(incoming());
+      allow update: if isValidId(userId) && isAdmin() && isValidAdmin(incoming()) &&
+                       incoming().userId == existing().userId &&
+                       incoming().createdAt == existing().createdAt;
+      allow delete: if isValidId(userId) && isAdmin();
+    }
+
+    // 3. Tournaments & Registered Players
+    match /tournaments/{tournamentId} {
+      allow get: if isValidId(tournamentId) && isSignedIn();
+      allow list: if isSignedIn();
+      allow create: if isValidId(tournamentId) && isAdmin() && isValidTournament(incoming());
+      allow update: if isValidId(tournamentId) &&
+                       isSignedIn() &&
+                       isValidTournament(incoming()) &&
+                       incoming().createdBy == existing().createdBy &&
+                       incoming().createdAt == existing().createdAt && (
+                         isAdmin() ||
+                         // Action: Player Joins Tournament (Atomic with registration creation)
+                         (existing().status != 'COMPLETED' &&
+                          existing().filledSlots < existing().maxSlots &&
+                          incoming().diff(existing()).affectedKeys().hasOnly(['filledSlots', 'updatedAt']) &&
+                          incoming().filledSlots == existing().filledSlots + 1 &&
+                          existsAfter(/databases/$(database)/documents/tournaments/$(tournamentId)/registrations/$(request.auth.uid)))
+                       );
+      allow delete: if isValidId(tournamentId) && isAdmin();
+
+      match /registrations/{userId} {
+        allow get: if isValidId(tournamentId) && isValidId(userId) && isSignedIn();
+        allow list: if isSignedIn();
+        allow create: if isValidId(tournamentId) &&
+                         isValidId(userId) &&
+                         isSignedIn() &&
+                         isValidRegistration(incoming()) &&
+                         incoming().userId == userId &&
+                         incoming().tournamentId == tournamentId && (
+                           isAdmin() ||
+                           (request.auth.uid == userId &&
+                            get(/databases/$(database)/documents/users/$(request.auth.uid)).data.blocked == false &&
+                            get(/databases/$(database)/documents/tournaments/$(tournamentId)).data.status != 'COMPLETED' &&
+                            get(/databases/$(database)/documents/tournaments/$(tournamentId)).data.filledSlots < get(/databases/$(database)/documents/tournaments/$(tournamentId)).data.maxSlots &&
+                            incoming().entryFeePaid == get(/databases/$(database)/documents/tournaments/$(tournamentId)).data.entryFee &&
+                            getAfter(/databases/$(database)/documents/tournaments/$(tournamentId)).data.filledSlots == get(/databases/$(database)/documents/tournaments/$(tournamentId)).data.filledSlots + 1 &&
+                            (get(/databases/$(database)/documents/tournaments/$(tournamentId)).data.entryFee == 0 ||
+                             getAfter(/databases/$(database)/documents/users/$(request.auth.uid)).data.walletBalance == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.walletBalance - get(/databases/$(database)/documents/tournaments/$(tournamentId)).data.entryFee))
+                         );
+        allow update: if isValidId(tournamentId) && isValidId(userId) && isAdmin() && isValidRegistration(incoming());
+        allow delete: if isValidId(tournamentId) && isValidId(userId) && isAdmin();
+      }
+    }
+
+    // 4. Deposits
+    match /deposits/{depositId} {
+      allow get: if isValidId(depositId) && isSignedIn() && (existing().userId == request.auth.uid || isAdmin());
+      allow list: if isSignedIn() && (existing().userId == request.auth.uid || isAdmin());
+
+      allow create: if isValidId(depositId) &&
+                       isSignedIn() &&
+                       isValidDeposit(incoming()) &&
+                       incoming().userId == request.auth.uid &&
+                       incoming().status == 'PENDING' &&
+                       !('reviewedBy' in incoming()) &&
+                       get(/databases/$(database)/documents/users/$(request.auth.uid)).data.blocked == false;
+
+      allow update: if isValidId(depositId) &&
+                       isAdmin() &&
+                       isValidDeposit(incoming()) &&
+                       existing().status == 'PENDING' &&
+                       incoming().userId == existing().userId &&
+                       incoming().amount == existing().amount &&
+                       incoming().paymentMethod == existing().paymentMethod &&
+                       incoming().referenceId == existing().referenceId &&
+                       incoming().createdAt == existing().createdAt &&
+                       incoming().status in ['APPROVED', 'REJECTED'] &&
+                       incoming().diff(existing()).affectedKeys().hasOnly(['status', 'adminNote', 'reviewedBy', 'updatedAt']);
+
+      allow delete: if false;
+    }
+
+    // 5. Used Reference Locks (Prevents duplicate transaction IDs)
+    match /used_references/{refKey} {
+      allow get: if isValidId(refKey) && isSignedIn();
+      allow list: if isAdmin();
+      allow create: if isValidId(refKey) &&
+                       isSignedIn() &&
+                       isValidUsedReference(incoming()) &&
+                       incoming().userId == request.auth.uid &&
+                       incoming().refKey == refKey;
+      allow update, delete: if false;
+    }
+
+    // 6. Withdrawals
+    match /withdrawals/{withdrawalId} {
+      allow get: if isValidId(withdrawalId) && isSignedIn() && (existing().userId == request.auth.uid || isAdmin());
+      allow list: if isSignedIn() && (existing().userId == request.auth.uid || isAdmin());
+
+      allow create: if isValidId(withdrawalId) &&
+                       isSignedIn() &&
+                       isValidWithdrawal(incoming()) &&
+                       incoming().userId == request.auth.uid &&
+                       incoming().status == 'PENDING' &&
+                       !('reviewedBy' in incoming()) &&
+                       get(/databases/$(database)/documents/users/$(request.auth.uid)).data.blocked == false &&
+                       get(/databases/$(database)/documents/users/$(request.auth.uid)).data.walletBalance >= incoming().amount &&
+                       getAfter(/databases/$(database)/documents/users/$(request.auth.uid)).data.walletBalance == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.walletBalance - incoming().amount;
+
+      allow update: if isValidId(withdrawalId) &&
+                       isAdmin() &&
+                       isValidWithdrawal(incoming()) &&
+                       existing().status == 'PENDING' &&
+                       incoming().userId == existing().userId &&
+                       incoming().amount == existing().amount &&
+                       incoming().createdAt == existing().createdAt &&
+                       incoming().status in ['APPROVED', 'REJECTED'] &&
+                       incoming().diff(existing()).affectedKeys().hasOnly(['status', 'adminNote', 'reviewedBy', 'updatedAt']);
+
+      allow delete: if false;
+    }
+
+    // 7. Transactions Ledger
+    match /transactions/{transactionId} {
+      allow get: if isValidId(transactionId) && isSignedIn() && (existing().userId == request.auth.uid || isAdmin());
+      allow list: if isSignedIn() && (existing().userId == request.auth.uid || isAdmin());
+
+      allow create: if isValidId(transactionId) &&
+                       isSignedIn() &&
+                       isValidTransaction(incoming()) && (
+                         isAdmin() ||
+                         (incoming().userId == request.auth.uid && (
+                           (incoming().type == 'DEPOSIT' && incoming().status == 'PENDING' && incoming().direction == 'CREDIT') ||
+                           (incoming().type == 'WITHDRAWAL' && incoming().status == 'PENDING' && incoming().direction == 'DEBIT') ||
+                           (incoming().type == 'ENTRY_FEE' && incoming().status == 'COMPLETED' && incoming().direction == 'DEBIT')
+                         ))
+                       );
+
+      allow update: if isValidId(transactionId) &&
+                       isAdmin() &&
+                       isValidTransaction(incoming()) &&
+                       incoming().userId == existing().userId &&
+                       incoming().createdAt == existing().createdAt &&
+                       incoming().diff(existing()).affectedKeys().hasOnly(['status', 'description', 'updatedAt']);
+
+      allow delete: if false;
+    }
+
+    // 8. Winners Hall of Fame
+    match /winners/{winnerId} {
+      allow get: if isValidId(winnerId) && isSignedIn();
+      allow list: if isSignedIn();
+      allow create, update: if isValidId(winnerId) && isAdmin() && isValidWinner(incoming());
+      allow delete: if isValidId(winnerId) && isAdmin();
+    }
+
+    // 9. App Config (Payment instructions)
+    match /app_config/{docId} {
+      allow get: if isValidId(docId) && isSignedIn();
+      allow list: if isSignedIn();
+      allow create, update: if isValidId(docId) && isAdmin() && isValidPaymentConfig(incoming());
+      allow delete: if isValidId(docId) && isAdmin();
+    }
+  }
+}

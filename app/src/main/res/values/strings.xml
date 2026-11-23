@@ -1,0 +1,10 @@
+<resources>
+    <string name="app_name">Pro Tournament</string>
+    <string name="tagline">Compete. Conquer. Cash Out.</string>
+    <string name="sign_in_google">Sign in with Google</string>
+    <string name="nav_home">Arena</string>
+    <string name="nav_tournaments">Matches</string>
+    <string name="nav_wallet">Wallet</string>
+    <string name="nav_profile">Profile</string>
+    <string name="nav_admin">Admin</string>
+</resources>

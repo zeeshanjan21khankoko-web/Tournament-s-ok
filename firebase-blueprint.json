@@ -1,0 +1,228 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "Registered gamer profile, unique Player ID, wallet balance, and match statistics.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "description": "Firebase Auth UID" },
+        "username": { "type": "string", "description": "Unique gamer tag (3-24 chars)" },
+        "email": { "type": "string", "description": "Verified Google account email" },
+        "playerId": { "type": "string", "description": "Unique Player ID e.g. PT-849201" },
+        "photoBase64": { "type": "string", "description": "Optional compressed JPEG data URI or preset key" },
+        "walletBalance": { "type": "integer", "description": "Available PKR balance (>= 0)" },
+        "matchesPlayed": { "type": "integer", "description": "Total tournaments joined" },
+        "wins": { "type": "integer", "description": "Total tournament wins" },
+        "blocked": { "type": "boolean", "description": "Whether account is suspended by admin" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Server timestamp" },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Server timestamp" }
+      },
+      "required": ["userId", "username", "email", "playerId", "walletBalance", "matchesPlayed", "wins", "blocked", "createdAt", "updatedAt"]
+    },
+    "Admin": {
+      "title": "Admin",
+      "description": "Authorized platform administrator record.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "email": { "type": "string" },
+        "displayName": { "type": "string" },
+        "role": { "type": "string", "enum": ["SUPER_ADMIN", "ADMIN"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "email", "displayName", "role", "createdAt"]
+    },
+    "Tournament": {
+      "title": "Tournament",
+      "description": "Esports tournament listing with entry fee, prize pool, slots, and match schedule.",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "gameName": { "type": "string" },
+        "bannerKey": { "type": "string", "enum": ["arena", "battle_royale", "tactical_fps"] },
+        "entryFee": { "type": "integer" },
+        "prizePool": { "type": "integer" },
+        "maxSlots": { "type": "integer" },
+        "filledSlots": { "type": "integer" },
+        "matchTimeEpochMs": { "type": "integer" },
+        "matchTimeLabel": { "type": "string" },
+        "status": { "type": "string", "enum": ["UPCOMING", "LIVE", "COMPLETED"] },
+        "rulesSummary": { "type": "string" },
+        "roomId": { "type": "string" },
+        "winnerUserId": { "type": "string" },
+        "winnerUsername": { "type": "string" },
+        "winnerPlayerId": { "type": "string" },
+        "createdBy": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["title", "gameName", "bannerKey", "entryFee", "prizePool", "maxSlots", "filledSlots", "matchTimeEpochMs", "matchTimeLabel", "status", "rulesSummary", "createdBy", "createdAt", "updatedAt"]
+    },
+    "Registration": {
+      "title": "Registration",
+      "description": "Player registration inside a tournament subcollection.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "tournamentId": { "type": "string" },
+        "username": { "type": "string" },
+        "playerId": { "type": "string" },
+        "photoBase64": { "type": "string" },
+        "entryFeePaid": { "type": "integer" },
+        "placement": { "type": "string" },
+        "prizeWon": { "type": "integer" },
+        "joinedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "tournamentId", "username", "playerId", "entryFeePaid", "prizeWon", "joinedAt"]
+    },
+    "Deposit": {
+      "title": "Deposit",
+      "description": "Manual deposit verification request for JazzCash, EasyPaisa, or Bank Transfer.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "username": { "type": "string" },
+        "playerId": { "type": "string" },
+        "amount": { "type": "integer" },
+        "paymentMethod": { "type": "string", "enum": ["JAZZCASH", "EASYPAISA", "BANK_TRANSFER"] },
+        "referenceId": { "type": "string" },
+        "senderAccount": { "type": "string" },
+        "screenshotBase64": { "type": "string" },
+        "status": { "type": "string", "enum": ["PENDING", "APPROVED", "REJECTED"] },
+        "adminNote": { "type": "string" },
+        "reviewedBy": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "username", "playerId", "amount", "paymentMethod", "referenceId", "senderAccount", "screenshotBase64", "status", "createdAt", "updatedAt"]
+    },
+    "UsedReference": {
+      "title": "UsedReference",
+      "description": "Idempotency lock preventing duplicate deposit transaction IDs.",
+      "type": "object",
+      "properties": {
+        "refKey": { "type": "string" },
+        "userId": { "type": "string" },
+        "depositId": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["refKey", "userId", "depositId", "createdAt"]
+    },
+    "Withdrawal": {
+      "title": "Withdrawal",
+      "description": "Player withdrawal payout request.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "username": { "type": "string" },
+        "playerId": { "type": "string" },
+        "amount": { "type": "integer" },
+        "paymentMethod": { "type": "string", "enum": ["JAZZCASH", "EASYPAISA", "BANK_TRANSFER"] },
+        "accountTitle": { "type": "string" },
+        "accountNumber": { "type": "string" },
+        "bankName": { "type": "string" },
+        "status": { "type": "string", "enum": ["PENDING", "APPROVED", "REJECTED"] },
+        "adminNote": { "type": "string" },
+        "reviewedBy": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "username", "playerId", "amount", "paymentMethod", "accountTitle", "accountNumber", "status", "createdAt", "updatedAt"]
+    },
+    "Transaction": {
+      "title": "Transaction",
+      "description": "Complete wallet ledger entry.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "username": { "type": "string" },
+        "type": { "type": "string", "enum": ["DEPOSIT", "WITHDRAWAL", "WITHDRAWAL_REFUND", "ENTRY_FEE", "PRIZE_WIN", "ADMIN_ADJUSTMENT"] },
+        "amount": { "type": "integer" },
+        "direction": { "type": "string", "enum": ["CREDIT", "DEBIT"] },
+        "status": { "type": "string", "enum": ["PENDING", "COMPLETED", "REJECTED"] },
+        "description": { "type": "string" },
+        "referenceId": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "username", "type", "amount", "direction", "status", "description", "createdAt", "updatedAt"]
+    },
+    "Winner": {
+      "title": "Winner",
+      "description": "Official declared tournament winner record.",
+      "type": "object",
+      "properties": {
+        "tournamentId": { "type": "string" },
+        "tournamentTitle": { "type": "string" },
+        "gameName": { "type": "string" },
+        "userId": { "type": "string" },
+        "username": { "type": "string" },
+        "playerId": { "type": "string" },
+        "prizeAmount": { "type": "integer" },
+        "placement": { "type": "string" },
+        "declaredBy": { "type": "string" },
+        "declaredAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["tournamentId", "tournamentTitle", "gameName", "userId", "username", "playerId", "prizeAmount", "placement", "declaredBy", "declaredAt"]
+    },
+    "PaymentConfig": {
+      "title": "PaymentConfig",
+      "description": "Admin-managed Pakistan deposit receiver accounts and instructions.",
+      "type": "object",
+      "properties": {
+        "jazzCashTitle": { "type": "string" },
+        "jazzCashNumber": { "type": "string" },
+        "easyPaisaTitle": { "type": "string" },
+        "easyPaisaNumber": { "type": "string" },
+        "bankName": { "type": "string" },
+        "bankAccountTitle": { "type": "string" },
+        "bankAccountNumber": { "type": "string" },
+        "instructions": { "type": "string" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["jazzCashTitle", "jazzCashNumber", "easyPaisaTitle", "easyPaisaNumber", "bankName", "bankAccountTitle", "bankAccountNumber", "instructions", "updatedAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/User" },
+      "description": "User profiles, Player IDs, wallet balances, and stats"
+    },
+    "/admins/{userId}": {
+      "schema": { "$ref": "#/entities/Admin" },
+      "description": "Authorized admin role registry"
+    },
+    "/tournaments/{tournamentId}": {
+      "schema": { "$ref": "#/entities/Tournament" },
+      "description": "Tournaments catalog and match status"
+    },
+    "/tournaments/{tournamentId}/registrations/{userId}": {
+      "schema": { "$ref": "#/entities/Registration" },
+      "description": "Players registered for a specific tournament"
+    },
+    "/deposits/{depositId}": {
+      "schema": { "$ref": "#/entities/Deposit" },
+      "description": "Manual deposit verification requests"
+    },
+    "/used_references/{refKey}": {
+      "schema": { "$ref": "#/entities/UsedReference" },
+      "description": "Unique deposit reference ID locks"
+    },
+    "/withdrawals/{withdrawalId}": {
+      "schema": { "$ref": "#/entities/Withdrawal" },
+      "description": "Withdrawal payout requests"
+    },
+    "/transactions/{transactionId}": {
+      "schema": { "$ref": "#/entities/Transaction" },
+      "description": "Complete wallet financial ledger"
+    },
+    "/winners/{winnerId}": {
+      "schema": { "$ref": "#/entities/Winner" },
+      "description": "Declared tournament winners"
+    },
+    "/app_config/{docId}": {
+      "schema": { "$ref": "#/entities/PaymentConfig" },
+      "description": "Platform payment receiver instructions"
+    }
+  }
+}
